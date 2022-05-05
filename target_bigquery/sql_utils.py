@@ -31,6 +31,44 @@ def insert_from_table_sql(src: bigquery.Table,
         f'{src.dataset_id}.{src.table_id}',
     )
 
+def merge_from_partitioned_table_sql(src: bigquery.Table,
+                         dest: bigquery.Table,
+                         columns: List[str],
+                         renamed_columns: Dict[str, str],
+                         primary_key_column_names: List[str],
+                         partition_field: str) -> str:
+
+    query = """
+    DECLARE date_filter ARRAY<TIMESTAMP> DEFAULT (
+        SELECT
+          ARRAY_AGG({partfield})
+        FROM
+        {source}
+        );
+    -- run the merge statement
+    MERGE `{target}` t
+    USING `{source}` s
+    ON {primary_key_condition}
+    AND t.{partfield} in UNNEST(date_filter)
+    WHEN MATCHED THEN
+        UPDATE SET {set_values}
+    WHEN NOT MATCHED THEN
+        INSERT ({renamed_cols}) VALUES ({cols})
+    """.format(
+        target=f'{dest.dataset_id}.{dest.table_id}',
+        source=f'{src.dataset_id}.{src.table_id}',
+        partfield=f'{partition_field}',
+        primary_key_condition=primary_key_condition(primary_key_column_names, renamed_columns),
+        set_values=', '.join(
+            '{}=s.{}'.format(
+                safe_column_name(renamed_columns.get(c, c), quotes=True),
+                safe_column_name(c, quotes=True))
+            for c in columns),
+        renamed_cols=', '.join(
+            safe_column_name(renamed_columns.get(c, c), quotes=True)
+            for c in columns),
+        cols=', '.join(safe_column_name(c,quotes=True) for c in columns))
+    return query
 
 #pylint: disable=too-many-arguments
 def merge_from_table_sql(src: bigquery.Table,

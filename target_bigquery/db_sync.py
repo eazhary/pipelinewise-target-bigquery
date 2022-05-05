@@ -382,8 +382,16 @@ class DbSync:
 
         pk_columns_names = primary_column_names(self.stream_schema_message)
         if pk_columns_names:
+            if (target_table.time_partitioning is not None):
+              query = sql_utils.merge_from_partitioned_table_sql(temp_table,
+                                                   target_table,
+                                                   self.column_names(),
+                                                   self.renamed_columns,
+                                                   pk_columns_names,
+                                                   target_table.time_partitioning.field)
+            else:
             # TODO: make temp table creation and DML atomic with merge
-            query = sql_utils.merge_from_table_sql(temp_table,
+               query = sql_utils.merge_from_table_sql(temp_table,
                                                    target_table,
                                                    self.column_names(),
                                                    self.renamed_columns,
